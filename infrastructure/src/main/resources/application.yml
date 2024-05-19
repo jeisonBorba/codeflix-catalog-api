@@ -1,0 +1,169 @@
+cache:
+  type: cache2k
+  names: admin-categories,admin-genres,admin-videos
+  max-entries: 200
+  ttl: 60 # seconds
+
+elasticsearch:
+  connect-timeout: 250
+  socket-timeout: 1_000
+
+graphql:
+  graphiql: true
+
+kafka:
+  auto-create-topics: false
+  pool-timeout: 1_000
+  consumers:
+    categories:
+      auto-offset-reset: earliest
+      concurrency: 1
+      id: kafka-listener-categories
+      topics: adm_videos_mysql.adm_videos.categories
+      group-id: catalogo-service
+      max-attempts: 4
+    cast-members:
+      auto-offset-reset: earliest
+      concurrency: 1
+      id: kafka-listener-castmembers
+      topics: adm_videos_mysql.adm_videos.cast_members
+      group-id: catalogo-service
+      max-attempts: 4
+    genres:
+      auto-offset-reset: earliest
+      concurrency: 1
+      id: kafka-listener-genres
+      topics: adm_videos_mysql.adm_videos.genres
+      group-id: catalogo-service
+      max-attempts: 4
+    videos:
+      auto-offset-reset: earliest
+      concurrency: 1
+      id: kafka-listener-videos
+      topics: adm_videos_mysql.adm_videos.videos
+      group-id: catalogo-service
+      max-attempts: 4
+
+keycloak:
+  token-uri: /protocol/openid-connect/token
+
+rest-client:
+  categories:
+    base-url: "${rest-client.base-url}/api/categories"
+    read-timeout: 1_000
+  genres:
+    base-url: "${rest-client.base-url}/api/genres"
+    read-timeout: 1_000
+  videos:
+    base-url: "${rest-client.base-url}/api/videos"
+    read-timeout: 1_000
+  keycloak:
+    base-url: "${keycloak.host}/realms/${keycloak.realm}"
+    read-timeout: 1_000
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+  compression:
+    enabled: true # Whether response compression is enabled.
+    mime-types: text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json # Comma-separated list of MIME types that should be compressed.
+    min-response-size: 1024 # Minimum "Content-Length" value that is required for compression to be performed.
+  undertow:
+    threads:
+      worker: 64 # Generally this should be reasonably high, at least 10 per CPU core: https://undertow.io/undertow-docs/undertow-docs-2.1.0/index.html#listeners-2
+      io: 4 # One IO thread per CPU core is a reasonable default: https://undertow.io/undertow-docs/undertow-docs-2.1.0/index.html#listeners-2
+
+spring:
+  cache:
+    cache-names: ${cache.names}
+    type: ${cache.type}
+  elasticsearch:
+    uris: ${elasticsearch.uris}
+    username: ${elasticsearch.username}
+    password: ${elasticsearch.password}
+    connect-timeout: ${elasticsearch.connect-timeout}
+    socket-timeout: ${elasticsearch.socket-timeout}
+  graphql:
+    graphiql:
+      enabled: ${graphql.graphiql}
+  kafka:
+    bootstrap-servers: ${kafka.bootstrap-servers}
+  servlet:
+    multipart:
+      max-file-size: 10GB # Max file size.
+      max-request-size: 100GB # Max request size.
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${keycloak.host}/realms/${keycloak.realm}/protocol/openid-connect/certs
+          issuer-uri: ${keycloak.host}/realms/${keycloak.realm}
+
+resilience4j.bulkhead:
+  configs:
+    default:
+      maxConcurrentCalls: 25
+      maxWaitDuration: 100
+    instances:
+      categories:
+        baseConfig: default
+      genres:
+        baseConfig: default
+      videos:
+        baseConfig: default
+
+resilience4j.circuitbreaker:
+  configs:
+    default:
+      registerHealthIndicator: true
+      slidingWindowType: COUNT_BASED
+      slidingWindowSize: 100
+      minimumNumberOfCalls: 20
+      permittedNumberOfCallsInHalfOpenState: 10
+      waitDurationInOpenState: 30s
+      failureRateThreshold: 50
+      slowCallRateThreshold: 70
+      slowCallDurationThreshold: 2_000
+      recordExceptions:
+        - com.fullcycle.catalogo.domain.exceptions.InternalErrorException
+        - org.springframework.web.client.ResourceAccessException
+        - org.springframework.web.client.HttpServerErrorException.InternalServerError
+        - org.springframework.web.client.HttpServerErrorException.GatewayTimeout
+        - org.springframework.web.client.HttpServerErrorException.ServiceUnavailable
+        - java.net.SocketTimeoutException
+        - java.net.http.HttpConnectTimeoutException
+        - java.net.http.HttpTimeoutException
+        - java.util.concurrent.TimeoutException
+        - java.io.IOException
+    instances:
+      categories:
+        baseConfig: default
+      genres:
+        baseConfig: default
+      videos:
+        baseConfig: default
+
+resilience4j.retry:
+  configs:
+    default:
+      maxAttempts: 3
+      waitDuration: 250
+      retryExceptions:
+        - com.fullcycle.catalogo.domain.exceptions.InternalErrorException
+        - org.springframework.web.client.ResourceAccessException
+        - org.springframework.web.client.HttpServerErrorException.InternalServerError
+        - org.springframework.web.client.HttpServerErrorException.GatewayTimeout
+        - org.springframework.web.client.HttpServerErrorException.ServiceUnavailable
+        - java.net.SocketTimeoutException
+        - java.net.http.HttpConnectTimeoutException
+        - java.net.http.HttpTimeoutException
+        - java.util.concurrent.TimeoutException
+        - java.io.IOException
+  instances:
+    categories:
+      baseConfig: default
+    genres:
+      baseConfig: default
+    videos:
+      baseConfig: default
